@@ -20,7 +20,7 @@ def gerar(seed: int = 2026) -> pd.DataFrame:
             escala = 70 * (1 + i * 0.12) * (1 if produto == "Produto A" else 0.75 if produto == "Produto B" else 1.25)
             for mes, fator in zip(MESES, fatores):
                 vendas = int(rng.poisson(escala * fator))
-                linhas.append({"Produto": produto, "Ciclo": ciclo, "Meses": mes, "Vendas": vendas})
+                linhas.append({"Produto": produto, "Período": ciclo, "Meses": mes, "Vendas": vendas})
     return pd.DataFrame(linhas)
 
 

@@ -23,8 +23,8 @@ def test_ciclos_incompletos_ficam_fora_do_teste():
     df = dados_exemplo()
     df = df[~((df["ciclo"] == "Ciclo 4") & (df["mes"] == "jan"))]
     resultado = analisar(df)
-    assert int(resultado["resumo_testes"]["ciclos_completos"].iloc[0]) == 3
-    assert resultado["cobertura"]["ciclo_completo"].sum() == 3
+    assert int(resultado["resumo_testes"]["periodos_completos"].iloc[0]) == 3
+    assert resultado["cobertura"]["periodo_completo"].sum() == 3
 
 
 def test_sem_dados_suficientes_nao_inventa_p_valor():

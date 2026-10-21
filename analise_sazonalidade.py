@@ -1,4 +1,4 @@
-"""Estudo exploratório de sazonalidade em ciclos comerciais (março a fevereiro).
+"""Estudo exploratório de sazonalidade em períodos comerciais (março a fevereiro).
 
 Uso: python analise_sazonalidade.py --input data/sazonalidade_sintetica.csv
 A amostra pública foi gerada artificialmente; nenhuma base comercial real é incluída.
@@ -18,7 +18,7 @@ import pandas as pd
 from scipy.stats import friedmanchisquare
 
 MESES = ["mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez", "jan", "fev"]
-COLUNAS = {"produto", "ciclo", "mes", "vendas"}
+COLUNAS = {"produto", "periodo", "mes", "vendas"}
 
 
 def nome_normalizado(valor: object) -> str:
@@ -49,7 +49,7 @@ def carregar_dados(caminho: str | Path) -> pd.DataFrame:
         raise ValueError("Formato não aceito: use CSV ou XLSX.")
 
     aliases = {"meses": "mes", "mes": "mes", "vendas": "vendas",
-               "produto": "produto", "ciclo": "ciclo"}
+               "produto": "produto", "periodo": "periodo", "ciclo": "periodo"}
     origem.columns = [aliases.get(nome_normalizado(c), nome_normalizado(c)) for c in origem.columns]
     if not origem.columns.is_unique:
         raise ValueError("Colunas duplicadas após normalizar cabeçalhos.")
@@ -58,13 +58,13 @@ def carregar_dados(caminho: str | Path) -> pd.DataFrame:
 
     df = origem[list(sorted(COLUNAS))].copy()
     df["produto"] = df["produto"].astype("string").str.strip()
-    df["ciclo"] = df["ciclo"].astype("string").str.strip()
+    df["periodo"] = df["periodo"].astype("string").str.strip()
     df["mes"] = df["mes"].astype("string").map(nome_normalizado).str[:3]
     invalidos = sorted(set(df["mes"].dropna()) - set(MESES))
     if invalidos:
         raise ValueError(f"Meses não reconhecidos: {invalidos}")
-    if df[["produto", "ciclo", "mes"]].isna().any().any() or (df["produto"] == "").any() or (df["ciclo"] == "").any():
-        raise ValueError("Produto, ciclo e mês devem estar preenchidos.")
+    if df[["produto", "periodo", "mes"]].isna().any().any() or (df["produto"] == "").any() or (df["periodo"] == "").any():
+        raise ValueError("Produto, período e mês devem estar preenchidos.")
     try:
         df["vendas"] = df["vendas"].map(parse_numero)
     except ValueError as exc:
@@ -105,51 +105,54 @@ def classificar_indice(indice: float) -> str:
 
 
 def analisar(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
-    """Um ciclo completo contribui uma vez por mês, reduzindo viés de tendência.
+    """Um período completo contribui uma vez por mês, reduzindo viés de tendência.
 
-    O teste de Friedman é exploratório e bloqueia por ciclo. Não demonstra causa.
-    Meses faltantes NÃO são assumidos como zero: ciclos incompletos são excluídos
+    O teste de Friedman é exploratório e bloqueia por período. Não demonstra causa.
+    Meses faltantes NÃO são assumidos como zero: períodos incompletos são excluídos
     do índice sazonal e do teste, mas permanecem nos totais e na cobertura.
     """
-    mensal = (df.groupby(["produto", "ciclo", "mes"], as_index=False,
+    df = df.rename(columns={"ciclo": "periodo"}).copy()
+    if not df.columns.is_unique:
+        raise ValueError("Colunas duplicadas após normalizar cabeçalhos.")
+    mensal = (df.groupby(["produto", "periodo", "mes"], as_index=False,
                          observed=True)["vendas"].sum())
-    totais_ciclos = (mensal.groupby(["produto", "ciclo"], as_index=False)["vendas"]
+    totais_periodos = (mensal.groupby(["produto", "periodo"], as_index=False)["vendas"]
                     .sum().rename(columns={"vendas": "vendas_total"}))
     tabelas_indices = []
     testes = []
     cobertura = []
 
     for produto, bloco in mensal.groupby("produto", sort=True):
-        matriz = bloco.pivot(index="ciclo", columns="mes", values="vendas").reindex(columns=MESES)
-        for ciclo, linha in matriz.iterrows():
-            cobertura.append({"produto": produto, "ciclo": ciclo,
+        matriz = bloco.pivot(index="periodo", columns="mes", values="vendas").reindex(columns=MESES)
+        for periodo, linha in matriz.iterrows():
+            cobertura.append({"produto": produto, "periodo": periodo,
                               "meses_observados": int(linha.notna().sum()),
-                              "ciclo_completo": bool(linha.notna().all())})
+                              "periodo_completo": bool(linha.notna().all())})
         completos = matriz.dropna(axis=0)
         completos = completos.loc[completos.sum(axis=1) > 0]
         n = len(completos)
 
         if n:
-            indices_por_ciclo = completos.div(completos.mean(axis=1), axis=0)
+            indices_por_periodo = completos.div(completos.mean(axis=1), axis=0)
             for mes in MESES:
-                x = indices_por_ciclo[mes]
+                x = indices_por_periodo[mes]
                 tabelas_indices.append({"produto": produto, "mes": mes,
                                         "indice_medio": float(x.mean()),
                                         "indice_mediano": float(x.median()),
                                         "classificacao": classificar_indice(float(x.mean())),
-                                        "ciclos_utilizados": n})
+                                        "periodos_utilizados": n})
         estatistica = p = w = np.nan
-        situacao = "Insuficiente: requer >=3 ciclos completos com vendas positivas"
+        situacao = "Insuficiente: requer >=3 períodos completos com vendas positivas"
         if n >= 3:
             assert len(MESES) == 12
-            if np.allclose(indices_por_ciclo.to_numpy(), 1.0):
+            if np.allclose(indices_por_periodo.to_numpy(), 1.0):
                 estatistica, p, w = 0.0, 1.0, 0.0
             else:
-                resultado = friedmanchisquare(*(indices_por_ciclo[m].to_numpy() for m in MESES))
+                resultado = friedmanchisquare(*(indices_por_periodo[m].to_numpy() for m in MESES))
                 estatistica, p = float(resultado.statistic), float(resultado.pvalue)
                 w = estatistica / (n * (len(MESES) - 1)) if np.isfinite(estatistica) else np.nan
             situacao = "Testado" if np.isfinite(p) else "Teste não identificável (dados constantes)"
-        testes.append({"produto": produto, "ciclos_completos": n,
+        testes.append({"produto": produto, "periodos_completos": n,
                        "friedman_chi2": estatistica, "p_valor": p,
                        "kendall_w": w, "situacao": situacao})
 
@@ -163,8 +166,8 @@ def analisar(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     )
     return {"resumo_testes": resumo,
             "indices_sazonais": pd.DataFrame(tabelas_indices, columns=[
-                "produto", "mes", "indice_medio", "indice_mediano", "classificacao", "ciclos_utilizados"]),
-            "vendas_por_ciclo": totais_ciclos,
+                "produto", "mes", "indice_medio", "indice_mediano", "classificacao", "periodos_utilizados"]),
+            "vendas_por_periodo": totais_periodos,
             "cobertura": pd.DataFrame(cobertura)}
 
 
@@ -175,7 +178,7 @@ def criar_graficos(indices: pd.DataFrame, pasta: Path) -> None:
         ax.plot(MESES, dados["indice_medio"].to_numpy(), marker="o", label="Índice médio")
         ax.plot(MESES, dados["indice_mediano"].to_numpy(), linestyle="--", marker=".", label="Índice mediano")
         ax.axhline(1, linewidth=1, color="gray", label="Referência = 1")
-        ax.set(xlabel="Mês (ciclo mar–fev)", ylabel="Índice relativo", title=f"Sazonalidade exploratória | {produto}")
+        ax.set(xlabel="Mês (período mar–fev)", ylabel="Índice relativo", title=f"Sazonalidade exploratória | {produto}")
         ax.legend()
         fig.tight_layout()
         fig.savefig(pasta / f"indice_produto_{numero:02}.png", dpi=160)

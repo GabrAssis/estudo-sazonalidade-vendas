@@ -22,3 +22,5 @@ dados_reais/
 # Somente o CSV explicitamente gerado neste projeto pode ser versionado
 data/*
 !data/sazonalidade_sintetica.csv
+
+# docs/assets/ contém apenas imagens reproduzidas pelo gerador de portfólio.
