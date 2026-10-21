@@ -1,0 +1,24 @@
+# Não versionar dados reais, saídas ou credenciais
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.ipynb_checkpoints/
+outputs/
+private_data/
+dados_reais/
+*.xlsx
+*.xls
+*.xlsm
+*.parquet
+*.db
+*.sqlite
+*.pdf
+*.csv
+# Somente o CSV explicitamente gerado neste projeto pode ser versionado
+data/*
+!data/sazonalidade_sintetica.csv
